@@ -56,11 +56,9 @@ class KS_AStar(AStar):
     def __init__(self, h=None):
         super().__init__(h)
         self.PG = PathGraph()
-        self.targetFound = False
-        self.status = None
-        self.iterations = 0
+        self.tFound = False
+        self.shouldContinue = True
         self.s, self.t = None, None
-        self.numSidetrack = 0
 
     def detourCost(self, u, v):
         return self.g[u] + self.G.weight(u, v) - self.g[v]
@@ -69,7 +67,6 @@ class KS_AStar(AStar):
         self.PG.addNode(v)
         newSidetrackEdge = Edge(u, v, self.detourCost(u, v))
         self.PG.nodes[v].inHeap.put((newSidetrackEdge.c, newSidetrackEdge))
-        self.numSidetrack += 1
     
     def buildTreeHeaps(self, s):
         for v in self.T:
@@ -122,7 +119,11 @@ class KS_AStar(AStar):
             for e2 in self.PG.edges[e1]:
                 typ = self.PG.edges[e1][e2].type
                 n = self.PG.edges[e1][e2].n
-                u = self.PG.edges[e1][e2].u.split(':')[1]
+                # Special case for R node...
+                if not self.PG.edges[e1][e2].u == 'R':
+                    u = self.PG.edges[e1][e2].u.split(':')[1]
+                else:
+                    u = 'R'
                 v = self.PG.edges[e1][e2].v.split(':')[1]
                 c = self.PG.edges[e1][e2].c
                 print("{} edge at path node {}:\t{} --> {}, cost: {}".format(typ, n, u, v, c))
@@ -149,11 +150,7 @@ class KS_AStar(AStar):
 
         # If target is chosen for expansion, set flag and exit
         if u == self.t:
-            self.targetFound = True
-            # Find the search queue index with t
-            idx = [n for _,n in self.open.elements].index(self.t)
-            # Remove t from A* search queue
-            self.open.elements.pop(idx)
+            self.tFound = True
             return
 
         if self.shouldExpand(u):
@@ -182,10 +179,16 @@ class KS_AStar(AStar):
                     else:
                         self.addIncoming(v, u, v)
     
-    def search(self):
-        while not self.targetFound and not self.open.empty():
+    def search(self, lim):
+        i = 0
+        while self.shouldContinue:
             # Search successors of A*
             self.doOneIteration()
+            # Decide if we continue with A*
+            if self.tFound or i >= lim:
+                self.shouldContinue = False
+        self.shouldContinue = True
+
 
 class KStar:
     def __init__(self, k=1):
@@ -204,7 +207,7 @@ class KStar:
 
     # Returns maximum distance d between the successors of n in Dijkstra's SPT
     def maxDist(self, n):
-        return max([self.dijkstra.g[n] + self.dijkstra.G.weight(n,nd) for nd in self.dijkstra.getOutgoingEdges(n)])
+        return max([self.dijkstra.g[n] + self.dijkstra.G.weight(n.id,nd) for nd in self.dijkstra.getOutgoingEdges(n.id)])
 
     # From K-Star-Java workbench:
     # This function is called after A* extended the path graph. It 
@@ -218,7 +221,7 @@ class KStar:
         # First time running Dijkstra, so it is maintained by default
         if self.dijkstra.virgin:
             # If target node was found by AStar
-            if self.AStar.targetFound:
+            if self.AStar.tFound:
                 # "fancy R" is the first node of Dijkstra's graph
                 cost, root_T = self.AStar.PG.nodes[self.t].rootT()
                 root_T_node = '%s:%s,%s' % (self.t, root_T.u, root_T.v)
@@ -308,7 +311,7 @@ class KStar:
         self.AStar.PG.addNode(s)
 
         # Run A* until t is selected for expansion
-        self.AStar.search()
+        self.AStar.search(1)
         # Refresh P(G)
         self.AStar.buildPathGraph()
         # Assign whatever P(G) was found by A* (partial or total)
@@ -329,7 +332,8 @@ class KStar:
                         pass
                     else:
                         # Resume A* in order to explore a larger portion of G
-                        self.AStar.search()
+                        self.AStar.halt = False
+                        self.AStar.search(1)
                         # Refresh P(G)
                         self.AStar.buildPathGraph()
                         # Here we should try to make Dijkstra's search results consistent between
@@ -353,10 +357,7 @@ class KStar:
                 # Attach to nd a parent link referring to n
                 node = Node(nd, parent=n)
                 # Insert nd into open_D
-                try:
-                    self.dijkstra.open.put((d_n, node))
-                except TypeError:
-                    pass
+                self.dijkstra.open.put((d_n, node))
                 self.dijkstra.g[node] = d_n
             # Let sigma be the path in P(G) via which n was reached
             seq = self.getSeq(n)
