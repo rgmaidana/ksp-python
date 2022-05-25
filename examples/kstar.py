@@ -2,7 +2,6 @@
 
 from KSP import KStar
 from KSP.DataStructures import WeightedGraph
-from KSP.GraphSearch import AStar, Dijkstra
 
 def kstar_ex_4_6_graph():
     graph = WeightedGraph()
