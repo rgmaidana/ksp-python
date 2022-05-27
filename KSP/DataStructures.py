@@ -52,9 +52,9 @@ class Edge:
         self.c = c
     
     def __lt__(self, other):
-        return other
+        return self
     def __le__(self, other):
-        return other
+        return self
 
 class WeightedGraph:
     def __init__(self):
