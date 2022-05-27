@@ -56,6 +56,43 @@ def get_h(u, v):
     # _, heuristic = kstar_ex_4_6_graph()
     return heuristic[u]
 
+# Find paths s-t from sequences of sidetrack edges
+def getPaths(ks, R):
+    paths = []
+    # The best path found by A* (seq == []) is found first
+    path = [ks.t]; n = ks.t
+    cost = 0
+    while not n == ks.s:
+        cost += ks.AStar.G.weight(ks.AStar.T[n], n)
+        n = ks.AStar.T[n]
+        path.append(n)
+    paths.append([path, cost])
+    R.pop(0)
+
+    # Find the other paths
+    for seq in R:
+        n = ks.t; cost = 0
+        path = [n]
+        while not n == ks.s:
+            if len(seq) > 0:
+                sidetrack = seq[-1].split(':')[1]
+                u, v = sidetrack.split(',')
+                if n == v:
+                    cost += ks.AStar.G.weight(u, n)
+                    n = u
+                    path.append(u)
+                    seq.pop(-1)
+                else:
+                    cost += ks.AStar.G.weight(ks.AStar.T[n], n)
+                    n = ks.AStar.T[n]
+                    path.append(n)
+            else:
+                cost += ks.AStar.G.weight(ks.AStar.T[n], n)
+                n = ks.AStar.T[n]
+                path.append(n)
+        paths.append([path, cost])
+    return paths
+
 if __name__ == "__main__":
     # Define the graph search algorithm
     # alg = Dijkstra()
