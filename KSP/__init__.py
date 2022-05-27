@@ -296,7 +296,7 @@ class KStar:
                     else:
                         # Resume A* in order to explore a larger portion of G
                         self.AStar.halt = False
-                        self.AStar.search(1)
+                        self.AStar.search(self.expansionLimit)
                         # Refresh P(G)
                         self.AStar.buildPathGraph()
                         # Here we should try to make Dijkstra's search results consistent between
