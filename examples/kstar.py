@@ -20,7 +20,7 @@ def kstar_ex_4_6_graph():
     # Incoming S5
     graph.addEdge('S3', 'S5', 3)
     # Incoming S6
-    graph.addEdge('S1', 'S6', 7); graph.addEdge('S4', 'S6', 1); graph.addEdge('S5', 'S6', 1)
+    graph.addEdge('S1', 'S6', 7); graph.addEdge('S4', 'S6', 1); graph.addEdge('S5', 'S6', 4)
 
     # Heuristic values from each node to t=S6
     heuristic = {'S0': 6, 'S1': 6, 'S2': 2, 'S3': 7, 'S4': 1, 'S5': 3, 'S6': 0}
