@@ -84,51 +84,48 @@ class KS_AStar(AStar):
                 # If Hin(v) is empty, then Ht(v) = Ht(u)
                 for e in self.PG.nodes[v].inHeap.elements:
                     self.PG.nodes[v].THeap.put(e)
-                
+
     def buildPathEdges(self):
-        for n in self.PG.nodes:
-            auxHeap = copy.deepcopy(self.PG.nodes[n].THeap)
-            while not auxHeap.empty():
-                try:
-                    u = auxHeap.get()
-                    R_u = self.PG.nodes[u[1].u].rootT()
-                    u_node = '%s:%s,%s' % (n, u[1].u, u[1].v)
-                    R_u_node = '%s:%s,%s' % (R_u[1].v, R_u[1].u, R_u[1].v)
-                    self.PG.addEdge(n, u_node, R_u_node, c=R_u[0], type="cross")     # Cross edge
-                    # self.printEdge(n, u[1], R_u[1], "Cross", R_u[0])
-                    v = auxHeap.get()
-                    R_v = self.PG.nodes[v[1].u].rootT()
-                    v_node = '%s:%s,%s' % (n, v[1].u, v[1].v)
-                    R_v_node = '%s:%s,%s' % (R_v[1].v, R_v[1].u, R_v[1].v)
-                    self.PG.addEdge(n, v_node, R_v_node, c=R_v[0], type="cross")     # Cross edge
-                    # self.printEdge(n, v[1], R_v[1], "Cross", R_v[0])
-                    self.PG.addEdge(n, u_node, v_node, c=v[0]-u[0], type="heap")    # Heap edge
-                    # self.printEdge(n, u[1], v[1], "Heap", v[0]-u[0])
-                # This exception occurs when the auxiliar heap is empty, so there are no more edges to add
-                except IndexError:
-                    pass
-            del auxHeap
+        for pNode in self.PG.nodes:
+            if not self.PG.nodes[pNode].THeap.empty():
+                # Add cross edge to the root of pNode 
+                nc, n = self.PG.nodes[pNode].rootT()
+                n_name = '%s:%s,%s' % (pNode, n.u, n.v)
+                Ru_c, Ru = self.PG.nodes[n.u].rootT()
+                Ru_name = '%s:%s,%s' % (Ru.v, Ru.u, Ru.v)
+                self.PG.addEdge(pNode, n_name, Ru_name, c=Ru_c, type="cross")
+                for i in range(1,len(self.PG.nodes[pNode].THeap.elements)):
+                    # There is a heap edge between pairs of nodes in THeap
+                    # and a cross edge for each node
+                    ni_c, ni = self.PG.nodes[pNode].THeap.elements[i]
+                    # Cross edge of ni
+                    ni_name = '%s:%s,%s' % (pNode, ni.u, ni.v)
+                    Ru_c, Ru = self.PG.nodes[ni.u].rootT()
+                    Ru_name = '%s:%s,%s' % (Ru.v, Ru.u, Ru.v)
+                    self.PG.addEdge(pNode, ni_name, Ru_name, c=Ru_c, type="cross")
+                    # Heap edge between n and ni
+                    self.PG.addEdge(pNode, n_name, ni_name, c=ni_c-nc, type="heap")
 
     def buildPathGraph(self):
         self.buildTreeHeaps(self.s)
         self.buildPathEdges()
 
         # Debug
-        numEdges = 0
-        for e1 in self.PG.edges:
-            for e2 in self.PG.edges[e1]:
-                typ = self.PG.edges[e1][e2].type
-                n = self.PG.edges[e1][e2].n
-                # Special case for R node...
-                if not self.PG.edges[e1][e2].u == 'R':
-                    u = self.PG.edges[e1][e2].u.split(':')[1]
-                else:
-                    u = 'R'
-                v = self.PG.edges[e1][e2].v.split(':')[1]
-                c = self.PG.edges[e1][e2].c
-                print("{} edge at path node {}:\t{} --> {}, cost: {}".format(typ, n, u, v, c))
-                numEdges += 1
-        print("Number of path edges: %d" % numEdges)
+        # numEdges = 0
+        # for e1 in self.PG.edges:
+        #     for e2 in self.PG.edges[e1]:
+        #         typ = self.PG.edges[e1][e2].type
+        #         n = self.PG.edges[e1][e2].n
+        #         # Special case for R node...
+        #         if not self.PG.edges[e1][e2].u == 'R':
+        #             u = self.PG.edges[e1][e2].u.split(':')[1]
+        #         else:
+        #             u = 'R'
+        #         v = self.PG.edges[e1][e2].v.split(':')[1]
+        #         c = self.PG.edges[e1][e2].c
+        #         print("{} edge at path node {}:\t{} --> {}, cost: {}".format(typ, n, u, v, c))
+        #         numEdges += 1
+        # print("Number of path edges: %d" % numEdges)
 
     # Indicates if a node should be expanded or not (e.g., according to branch-and-bound pruning)
     # The default implementation returns "true"
@@ -183,9 +180,9 @@ class KS_AStar(AStar):
         i = 0
         while self.shouldContinue:
             # Search successors of A*
-            self.doOneIteration()
+            self.doOneIteration(); i += 1
             # Decide if we continue with A*
-            if self.tFound or i >= lim:
+            if self.tFound or i >= lim or self.open.empty():
                 self.shouldContinue = False
         self.shouldContinue = True
 
@@ -198,10 +195,8 @@ class KStar:
         self.k = k
         self.R = []
 
-        self.numNodesLimit = inf
-        self.numEdgesLimit = inf
-        self.numIterLimit = inf
-
+        self.expansionLimit = inf
+        
         self.s, self.t = None, None
         self.numIter = 0
 
@@ -266,38 +261,6 @@ class KStar:
         self.dijkstra.s = s
         self.dijkstra.t = t
 
-    # Find paths s-t from sequences of sidetrack edges
-    def getPaths(self, R):
-        paths = []
-        # The best path found by A* (seq == []) is found first
-        path = [self.t]; n = self.t
-        while not n == self.s:
-            n = self.AStar.T[n]
-            path.append(n)
-        paths.append(path)
-        R.pop(0)
-
-        # Find the other paths
-        for seq in R:
-            n = self.t
-            path = [n]
-            while not n == self.s:
-                if len(seq) > 0:
-                    sidetrack = seq[-1].split(':')[1]
-                    u, v = sidetrack.split(',')
-                    if n == v:
-                        n = u
-                        path.append(u)
-                        seq.pop(-1)
-                    else:
-                        n = self.AStar.T[n]
-                        path.append(n)
-                else:
-                    n = self.AStar.T[n]
-                    path.append(n)
-            paths.append(path)
-        return paths
-
     # Implement K* search algorithm here
     # From page 2141 of K* paper
     def search(self, s, t, k=1):
@@ -311,7 +274,7 @@ class KStar:
         self.AStar.PG.addNode(s)
 
         # Run A* until t is selected for expansion
-        self.AStar.search(1)
+        self.AStar.search(self.expansionLimit)
         # Refresh P(G)
         self.AStar.buildPathGraph()
         # Assign whatever P(G) was found by A* (partial or total)
@@ -367,4 +330,4 @@ class KStar:
                 # Go to line 26
                 break
         # Line 26
-        return self.getPaths(self.R)
+        return self.R
