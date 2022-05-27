@@ -101,20 +101,22 @@ if __name__ == "__main__":
 
     # Initialize search algorithm with problem graph G
     ks.AStar.G, _ = kstar_ex_3_graph()
+    # ks.AStar.G, _ = kstar_ex_4_6_graph()
 
     # Set heuristic function handle for A*
     ks.AStar.h = get_h
     
     # Get the shortest path tree
     s, t = 'S0', 'S4'      # Start and goal depend on the graph notation
-    paths = ks.search(s, t, k=10)
+    sequences = ks.search(s, t, k=12)
+    paths = getPaths(ks, sequences)
     
     # Print paths
     print()
-    for i, path in enumerate(paths):
-        cost = 0
+    for i, p in enumerate(paths):
+        path, c = p
         path.reverse()
-        print('Path %d: ' % (i+1), end='')
+        print('Path %d\t- cost %d: ' % (i+1, c), end='')
         for i in range(len(path)-1):
             print('%s->' % path[i], end='')
         print('%s' % path[-1])
