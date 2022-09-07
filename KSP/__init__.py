@@ -13,9 +13,48 @@ class KS_Dijkstra(Dijkstra):
         self.virgin = True
         self.s = None
         self.t = None
-        self.paths = {'R': Node('R')}
+        self.paths = {"*": Node("*")}
 
     # Indicates if a node should be expanded or not (e.g., according to branch-and-bound)
+    # The default implementation returns "true"
+    def shouldExpand(self, u):
+        return True
+
+    # Returns the path sigma in PG via which n was reached
+    def sigma(self, n):
+        sigma = [n]
+        while not n == "*":
+            n = self.searchTree.T[n]
+            sigma.append(n)
+        sigma.append("*")
+        return sigma
+
+# Modified K* AStar
+class KS_AStar(AStar):
+    def __init__(self):
+        super().__init__()
+        self.PG = PathGraph()
+        self.tFound = False
+        self.shouldContinue = True
+        self.s, self.t = None, None
+        self.current = None
+        
+        # Function handles
+        self.successors = lambda _: []
+        self.cost = lambda u, v: self.searchTree.g[u] + self.G.weight(u,v)
+        self.h = lambda u, v: 0
+        self.f = lambda u, v: self.cost(u, v) + self.h(v, self.t)
+
+    def detourCost(self, u, v):
+        return self.searchTree.g[u] + self.G.weight(u, v) - self.searchTree.g[v]
+
+    # Adds incoming edge into Hin(v)
+    def addIncoming(self, u, v):
+        self.PG.addNode(v)
+        newSidetrackEdge = Edge(u, v, self.detourCost(u, v))
+        self.PG.nodes[v].inHeap.put((newSidetrackEdge.c, newSidetrackEdge))
+
+    # Indicates if a node should be expanded or not (e.g., according to branch-and-bound pruning)
     # The default implementation returns "true"
     def shouldExpand(self, u):
         return True
@@ -24,52 +63,54 @@ class KS_Dijkstra(Dijkstra):
     # For now, they are the neighbors of u in the graph G
     # Later, G will be implicit by the successor function
     def getOutgoingEdges(self, u):
-        return self.G.neighboors(u)
+        # Add successor edges to problem graph
+        # NB! Successor function must return a list of (u,v,c) edges using the
+        # DataStructure.Edges object
+        for edge in self.successors(u):
+            self.G.addEdge(edge.u, edge.v, edge.c)
+        return list(self.G.neighbors(u))
 
-    # Returns the path sigma in PG via which n was reached
-    def sigma(self, n):
-        sigma = [n]
-        while not n == 'R':
-            n = self.T[n]
-            sigma.append(n)
-        sigma.append('R')
-        return sigma
-
-    # Single-step dijkstra search
+    # One expansion step for A*
     def doOneIteration(self):
-        self.iterations += 1
-        n = self.open.get()[1]
-        if self.shouldExpand(n):
-            successors = self.getOutgoingEdges(n)
+        # Get node with minimal distance from the source
+        self.current = self.queue.get()[1]
+        # Put it in the closed list
+        self.closed.append(self.current)
+
+        # If target is chosen for expansion, set flag and exit
+        if self.current == self.t:
+            self.tFound = True
+            return
+
+        if self.shouldExpand(self.current):
+            successors = self.getOutgoingEdges(self.current)
             for v in successors:
-                new_g = self.g[n] + self.G.weight(n, v)
-                if (not v in self.T) or (new_g < self.g[v]):
-                    self.g[v] = new_g
-                    f = new_g
-                    self.open.put((f, v))
-                    self.T[v] = n
-        return self.sigma(n)
-
-
-# Modified K* AStar
-class KS_AStar(AStar):
-    def __init__(self, h=None):
-        super().__init__(h)
-        self.PG = PathGraph()
-        self.tFound = False
-        self.shouldContinue = True
-        self.s, self.t = None, None
-
-    def detourCost(self, u, v):
-        return self.g[u] + self.G.weight(u, v) - self.g[v]
-
-    def addIncoming(self, n, u, v):
-        self.PG.addNode(v)
-        newSidetrackEdge = Edge(u, v, self.detourCost(u, v))
-        self.PG.nodes[v].inHeap.put((newSidetrackEdge.c, newSidetrackEdge))
+                new_g = self.cost(self.current, v)
+                f = self.f(self.current, v)
+                # v is in the SPT
+                if v in self.searchTree.T:
+                    # If the path via the edge (u,v) is better than the current SPT path (ud,v),
+                    # then the old SPT path (ud,v) becomes a sidetrack edge
+                    if new_g < self.searchTree.g[v]:
+                        ud = self.searchTree.T[v]; fd = self.f(ud, v)
+                        self.queue.remove((fd, v))
+                        self.queue.put((f, v))
+                        self.searchTree.g[v] = new_g
+                        self.addIncoming(ud, v)
+                        self.searchTree.T[v] = self.current
+                    # If the path via the edge (u,v) is not better, then (u,v) is a sidetrack edge
+                    else:
+                        # if not v in self.closed:
+                        self.addIncoming(self.current, v)
+                # v is a new vertex
+                else:
+                    self.PG.addNode(v)
+                    self.queue.put((f,v))
+                    self.searchTree.g[v] = new_g
+                    self.searchTree.T[v] = self.current
     
     def buildTreeHeaps(self, s):
-        for v in self.T:
+        for v in self.searchTree.T:
             # If v is the start node, then Ht(s) is an empty heap
             if v == s:
                 # rootIn(s) is added to Ht(s) if Hin(s) is not empty
@@ -77,7 +118,7 @@ class KS_AStar(AStar):
                     self.PG.nodes[s].THeap.put(self.PG.nodes[s].inHeap.elements[0])
             else:
                 # Let u be the predecessor of v in the SPT
-                u = self.T[v]
+                u = self.searchTree.T[v]
                 # Ht(v) is constructed as a copy of Ht(u)
                 self.PG.nodes[v].THeap = copy.deepcopy(self.PG.nodes[u].THeap)
                 # Add rootIn(v) to Ht(v)
@@ -91,90 +132,26 @@ class KS_AStar(AStar):
                 # Add cross edge to the root of pNode 
                 nc, n = self.PG.nodes[pNode].rootT()
                 n_name = '%s:%s,%s' % (pNode, n.u, n.v)
-                Ru_c, Ru = self.PG.nodes[n.u].rootT()
-                Ru_name = '%s:%s,%s' % (Ru.v, Ru.u, Ru.v)
-                self.PG.addEdge(pNode, n_name, Ru_name, c=Ru_c, type="cross")
+                if not self.PG.nodes[n.u].rootT()[1] == None:
+                    Ru_c, Ru = self.PG.nodes[n.u].rootT()
+                    Ru_name = '%s:%s,%s' % (Ru.v, Ru.u, Ru.v)
+                    self.PG.addEdge(pNode, n_name, Ru_name, c=Ru_c, type="cross")
                 for i in range(1,len(self.PG.nodes[pNode].THeap.elements)):
                     # There is a heap edge between pairs of nodes in THeap
                     # and a cross edge for each node
                     ni_c, ni = self.PG.nodes[pNode].THeap.elements[i]
                     # Cross edge of ni
                     ni_name = '%s:%s,%s' % (pNode, ni.u, ni.v)
-                    Ru_c, Ru = self.PG.nodes[ni.u].rootT()
-                    Ru_name = '%s:%s,%s' % (Ru.v, Ru.u, Ru.v)
-                    self.PG.addEdge(pNode, ni_name, Ru_name, c=Ru_c, type="cross")
+                    if not self.PG.nodes[ni.u].rootT()[1] == None:
+                        Ru_c, Ru = self.PG.nodes[ni.u].rootT()
+                        Ru_name = '%s:%s,%s' % (Ru.v, Ru.u, Ru.v)
+                        self.PG.addEdge(pNode, ni_name, Ru_name, c=Ru_c, type="cross")
                     # Heap edge between n and ni
                     self.PG.addEdge(pNode, n_name, ni_name, c=ni_c-nc, type="heap")
 
     def buildPathGraph(self):
         self.buildTreeHeaps(self.s)
         self.buildPathEdges()
-
-        # Debug
-        # numEdges = 0
-        # for e1 in self.PG.edges:
-        #     for e2 in self.PG.edges[e1]:
-        #         typ = self.PG.edges[e1][e2].type
-        #         n = self.PG.edges[e1][e2].n
-        #         # Special case for R node...
-        #         if not self.PG.edges[e1][e2].u == 'R':
-        #             u = self.PG.edges[e1][e2].u.split(':')[1]
-        #         else:
-        #             u = 'R'
-        #         v = self.PG.edges[e1][e2].v.split(':')[1]
-        #         c = self.PG.edges[e1][e2].c
-        #         print("{} edge at path node {}:\t{} --> {}, cost: {}".format(typ, n, u, v, c))
-        #         numEdges += 1
-        # print("Number of path edges: %d" % numEdges)
-
-    # Indicates if a node should be expanded or not (e.g., according to branch-and-bound pruning)
-    # The default implementation returns "true"
-    def shouldExpand(self, u):
-        return True
-
-    # Returns successors of u
-    # For now, they are the neighbors of u in the graph G
-    # Later, G will be implicit by the successor function
-    def getOutgoingEdges(self, u):
-        return self.G.neighboors(u)
-
-    # One expansion step for A*
-    def doOneIteration(self):
-        # Get node with minimal distance from the source
-        u = self.open.get()[1]
-        # Put it in the closed list
-        self.closed.append(u)
-
-        # If target is chosen for expansion, set flag and exit
-        if u == self.t:
-            self.tFound = True
-            return
-
-        if self.shouldExpand(u):
-            successors = self.getOutgoingEdges(u)
-            for v in successors:
-                new_g = self.g[u] + self.G.weight(u, v)
-                # If v is not in the shortest path tree, it hasn't been visited before,
-                # so the (u,v) edge is inserted in the SPT
-                if (not v in self.T):
-                    self.PG.addNode(v)
-                    f = new_g + self.h(v, self.t)
-                    self.open.put((f, v))
-                    self.g[v] = new_g
-                    self.T[v] = u             
-                else:
-                    # If v is in the SPT and the path via the edge (u,v) is better, then the old SPT path 
-                    # becomes a sidetrack edge
-                    if (new_g < self.g[v]):
-                        f = new_g + self.h(v, self.t)
-                        self.open.put((f, v))
-                        self.g[v] = new_g
-                        self.addIncoming(v, self.T[v], v)
-                        self.T[v] = u    
-                    # If v is in the SPT but the path via the edge (u,v) is not better, then that edge 
-                    # is a sidetrack edge
-                    else:
-                        self.addIncoming(v, u, v)
     
     def search(self, lim):
         i = 0
@@ -182,10 +159,9 @@ class KS_AStar(AStar):
             # Search successors of A*
             self.doOneIteration(); i += 1
             # Decide if we continue with A*
-            if self.tFound or i >= lim or self.open.empty():
+            if self.tFound or i >= lim or self.queue.empty():
                 self.shouldContinue = False
         self.shouldContinue = True
-
 
 class KStar:
     def __init__(self, k=1):
@@ -200,9 +176,14 @@ class KStar:
         self.s, self.t = None, None
         self.numIter = 0
 
+        self.scheduling_F = lambda u: self.AStar.searchTree.g[u] + self.AStar.h(u, self.t)
+
     # Returns maximum distance d between the successors of n in Dijkstra's SPT
     def maxDist(self, n):
-        return max([self.dijkstra.g[n] + self.dijkstra.G.weight(n.id,nd) for nd in self.dijkstra.getOutgoingEdges(n.id)])
+        neighbors = self.dijkstra.G.neighbors(n.id)
+        if len(neighbors) == 0:
+            return 0
+        return max([self.dijkstra.searchTree.g[n] + self.dijkstra.G.weight(n.id,nd) for nd in self.dijkstra.G.neighbors(n.id)])
 
     # From K-Star-Java workbench:
     # This function is called after A* extended the path graph. It 
@@ -217,14 +198,19 @@ class KStar:
         if self.dijkstra.virgin:
             # If target node was found by AStar
             if self.AStar.tFound:
-                # "fancy R" is the first node of Dijkstra's graph
-                cost, root_T = self.AStar.PG.nodes[self.t].rootT()
-                root_T_node = '%s:%s,%s' % (self.t, root_T.u, root_T.v)
-                R_node = Node('R')
-                self.dijkstra.G.addEdge(self.t, 'R', root_T_node, c=cost, type="cross")
+                # "*" is the first node of Dijkstra's graph
+                R_node = Node('*')
                 # Put R on Dijkstra's open queue
-                self.dijkstra.open.put((0, R_node))
-                self.dijkstra.g[R_node] = 0
+                self.dijkstra.queue.put((0, R_node))
+                self.dijkstra.searchTree.g[R_node] = 0
+                
+                # Get root of Ht(t)
+                cost, root_T = self.dijkstra.G.nodes[self.t].rootT()
+                # If Ht(t) is empty, then there are no sidetrack edges leading to the
+                # target. Then we add "*" as the root of Ht(t)???
+                if not root_T == None:
+                    root_T_node = '%s:%s,%s' % (self.t, root_T.u, root_T.v)
+                    self.dijkstra.G.addEdge(self.t, '*', root_T_node, c=cost, type="cross")
             self.dijkstra.virgin = False
             return True
         else:
@@ -241,11 +227,11 @@ class KStar:
 
     # Returns the sequence of sidetrack edges for sigma
     def getSeq(self, n):
-        seq = [n.id] if not n.id == 'R' else []
+        seq = [n.id] if not n.id == "*" else []
         while not n.parent == None:
             ni_1, ni = n, n.parent
             edge = self.dijkstra.G.edges[ni.id][ni_1.id]
-            if not ni.id == 'R':
+            if not ni.id == "*":
                 if edge.type == 'cross':
                     seq.append(ni.id)
                 # else:
@@ -263,14 +249,14 @@ class KStar:
 
     # Implement K* search algorithm here
     # From page 2141 of K* paper
-    def search(self, s, t, k=1):
+    def search(self, s, t, k=1, start_g=0):
         self.updateStartGoal(s, t)
         self.k = k
 
         # Start A* queue with initial node
-        self.AStar.open.put((0, s))
-        self.AStar.T[s] = None
-        self.AStar.g[s] = 0
+        self.AStar.queue.put((0, s))
+        self.AStar.searchTree.T[s] = None
+        self.AStar.searchTree.g[s] = start_g
         self.AStar.PG.addNode(s)
 
         # Run A* until t is selected for expansion
@@ -282,46 +268,48 @@ class KStar:
         self.tryToMaintainDijkstraSearch()
 
         # Main loop (lines 8-25)
-        while (not self.AStar.open.empty()) or (not self.dijkstra.open.empty()):
+        resumeAStar = True
+        while (not self.AStar.queue.empty()) or (not self.dijkstra.queue.empty()):
             # Lines 9-16
-            if not self.AStar.open.empty():
-                if not self.dijkstra.open.empty():
+            if not self.AStar.queue.empty():
+                if not self.dijkstra.queue.empty():
                     # Let u be the head of the search queue of A* and n the head of open_D
-                    u, n = self.AStar.open.peek()[1], self.dijkstra.open.peek()[1]
+                    u, n = self.AStar.queue.peek()[1], self.dijkstra.queue.peek()[1]
                     d = self.maxDist(n)                    
                     # Scheduling mechanism
-                    f_u = self.AStar.g[u] + self.AStar.h(u, self.t)
-                    if self.AStar.g[self.t] + d <= f_u:
-                        pass
-                    else:
-                        # Resume A* in order to explore a larger portion of G
-                        self.AStar.halt = False
-                        self.AStar.search(self.expansionLimit)
-                        # Refresh P(G)
-                        self.AStar.buildPathGraph()
-                        # Here we should try to make Dijkstra's search results consistent between
-                        # rounds of A* (algorithm line 15). TODO?
-                        # The paper says that P(G) does not need to be reconstructed or restructured 
-                        # if we use a consistent heuristic. So we assume later on a consistent heuristic 
-                        # will be available and don't worry about this part right now.
-                        self.tryToMaintainDijkstraSearch()
-                        continue
+                    f_u = self.scheduling_F(u)
+                    if self.AStar.searchTree.g[self.t] + d <= f_u:
+                        resumeAStar = False
+                if resumeAStar:
+                    # Resume A* in order to explore a larger portion of G
+                    self.AStar.search(self.expansionLimit)
+                    # Refresh P(G)
+                    self.AStar.buildPathGraph()
+                    # Here we should try to make Dijkstra's search results consistent between
+                    # rounds of A* (algorithm line 15). TODO?
+                    # The paper says that P(G) does not need to be reconstructed or restructured 
+                    # if we use a consistent heuristic. So we assume later on a consistent heuristic 
+                    # will be available and don't worry about this part right now.
+                    self.tryToMaintainDijkstraSearch()
+                    continue
 
             # Line 17
-            if self.dijkstra.open.empty():
+            resumeAStar = True
+            if self.dijkstra.queue.empty():
                 continue
 
             # Lines 18-25
             # Remove from open_D and place on closed_D the node n with the minimal d-value
-            n = self.dijkstra.open.get()[1]
+            n = self.dijkstra.queue.get()[1]
             self.dijkstra.closed.append(n.id)
-            for nd in self.dijkstra.getOutgoingEdges(n.id):
-                d_n = self.dijkstra.g[n] + self.dijkstra.G.weight(n.id,nd)
+            for nd in self.dijkstra.G.neighbors(n.id):
+                d_n = self.dijkstra.searchTree.g[n] + self.dijkstra.G.weight(n.id,nd)
                 # Attach to nd a parent link referring to n
                 node = Node(nd, parent=n)
                 # Insert nd into open_D
-                self.dijkstra.open.put((d_n, node))
-                self.dijkstra.g[node] = d_n
+                self.dijkstra.queue.put((d_n, node))
+                self.dijkstra.searchTree.g[node] = d_n
+
             # Let sigma be the path in P(G) via which n was reached
             seq = self.getSeq(n)
             # Add seq(sigma) at the end of R
@@ -329,5 +317,6 @@ class KStar:
             if len(self.R) == self.k:
                 # Go to line 26
                 break
+            
         # Line 26
         return self.R

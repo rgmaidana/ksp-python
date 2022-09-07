@@ -28,7 +28,10 @@ class PriorityQueue:
         return heapq.heappop(self.elements)
 
     def peek(self, i=0):
-        return self.elements[i] if len(self.elements) > 0 else None
+        return self.elements[i] if len(self.elements) > 0 else (None, None)
+
+    def remove(self, e):
+        self.elements.remove(e)
 
 # In K-Star-Workbench, DefaultVertex?
 class Node:
@@ -46,7 +49,7 @@ class Node:
 
 # In K-Star-Workbench, DefaultDirectedEdge?
 class Edge:
-    def __init__(self, u, v, c):
+    def __init__(self, u=None, v=None, c=0):
         self.u = u
         self.v = v
         self.c = c
@@ -65,15 +68,15 @@ class WeightedGraph:
         if not n in self.nodes.keys():
             self.nodes[n] = Node(n, data=data)
 
-    def addEdge(self, u, v, c=None):
+    def addEdge(self, u, v, c=0):
         self.addNode(u)
         self.addNode(v)
         if not u in self.edges.keys():
             self.edges[u] = {}
-        self.edges[u][v] = Edge(u, v, c)
+        self.edges[u][v] = Edge(u=u, v=v, c=c)
 
-    def neighboors(self, n):
-        return self.edges[n].keys()
+    def neighbors(self, n):
+        return list(self.edges[n].keys()) if n in self.edges else []
 
     def weight(self, u, v):
         return self.edges[u][v].c
@@ -87,12 +90,12 @@ class PathNode(Node):
     def rootIn(self):
         if not self.inHeap.empty():
             return self.inHeap.elements[0]
-        return None
+        return None, None
 
     def rootT(self):
         if not self.THeap.empty():
             return self.THeap.elements[0]
-        return None
+        return None, None
 
 class PathEdge(Edge):
     def __init__(self, n, u, v, c, type=None):
@@ -113,3 +116,26 @@ class PathGraph(WeightedGraph):
         if not u in self.edges.keys():
             self.edges[u] = {}
         self.edges[u][v] = PathEdge(n, u, v, c, type)
+
+class SearchTree:
+    def __init__(self):
+        self.opened = dict()
+        self.closed = dict()
+        self.T = dict()
+        self.g = dict()
+    
+    def close(self, v):
+        # Remove from open
+        self.opened.pop(v)
+        # Insert in closed
+        self.closed[v] = 1
+
+    def isClosed(self, v):
+        return v in self.closed.keys()
+
+    def open(self, v):
+        if not self.isOpen(v):
+            self.opened[v] = 1
+    
+    def isOpen(self, v):
+        return v in self.opened.keys()
