@@ -30,7 +30,7 @@ See the "kstar.py" example for details.
 
 * KStar:
     - Implement consistency check between rounds of Dijkstra and A*;
-    - Implement support for successor functions;
+    - ~~Implement support for successor functions;~~
     - Implement branch-and-bound pruning (function "shouldExpand" in A*);
     - Test and validate with larger graphs.
 
