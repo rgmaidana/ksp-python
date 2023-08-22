@@ -1,3 +1,5 @@
+# Copyright 2023 Norwegian University of Science and Technology (NTNU)
+# Author: Renan Guedes Maidana
 import copy
 from typing import Type
 from KSP.DataStructures import Edge, Node, PathGraph

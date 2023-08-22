@@ -1,3 +1,6 @@
+# Copyright 2023 Norwegian University of Science and Technology (NTNU)
+# Author: Renan Guedes Maidana
+
 #!/usr/bin/env python3
 
 from KSP import KStar

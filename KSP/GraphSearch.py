@@ -1,3 +1,5 @@
+# Copyright 2023 Norwegian University of Science and Technology (NTNU)
+# Author: Renan Guedes Maidana
 from KSP.DataStructures import PriorityQueue, SearchTree, WeightedGraph
 
 class Dijkstra:

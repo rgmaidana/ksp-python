@@ -1,3 +1,5 @@
+# Copyright 2023 Norwegian University of Science and Technology (NTNU)
+# Author: Renan Guedes Maidana
 import collections
 import heapq
 from math import sqrt
