@@ -1,5 +1,6 @@
 import collections
 import heapq
+from math import sqrt
 
 class Queue:
     def __init__(self):
@@ -17,21 +18,24 @@ class Queue:
 class PriorityQueue:
     def __init__(self):
         self.elements = []
-    
+        
     def empty(self):
         return len(self.elements) == 0
     
-    def put(self, e):
-        heapq.heappush(self.elements, e)
+    def push(self, item, priority):
+        entry = (priority, item)
+        heapq.heappush(self.elements, entry)
     
-    def get(self):
+    def pop(self):
         return heapq.heappop(self.elements)
 
-    def peek(self, i=0):
-        return self.elements[i] if len(self.elements) > 0 else (None, None)
+    def peek(self):
+        return self.elements[0]
 
     def remove(self, e):
-        self.elements.remove(e)
+        if e in self.elements:
+            self.elements.remove(e)
+        heapq.heapify(self.elements)
 
 # In K-Star-Workbench, DefaultVertex?
 class Node:
@@ -81,6 +85,52 @@ class WeightedGraph:
     def weight(self, u, v):
         return self.edges[u][v].c
 
+class Grid:
+    def __init__(self, origin, width, height, resolution=1):
+        self.origin = origin
+        self.width = width
+        self.height = height
+        self.resolution = resolution    # m/grid pos
+        self.map = None
+        self.weights = {}
+
+    def meter2grid(self, x, y):
+        grid_x = (x - self.origin[0]) / self.resolution
+        grid_y = (y - self.origin[1]) / self.resolution
+        return int(grid_x), int(grid_y)
+    
+    def grid2meter(self, grid_x, grid_y):
+        x = (grid_x * self.resolution) + self.origin[0]
+        y = (grid_y * self.resolution) + self.origin[1]
+        return x, y
+    
+    def cost(self, from_node, to_node):
+        return self.weights.get(to_node, 1)
+    
+    def weight(self, u, v):
+        return 1
+    
+    def neighbors(self, id, step):
+        (x, y) = id
+        x_meter, y_meter = self.grid2meter(x, y)
+        neighbors = [(x+step, y),   (x, y-step),
+                     (x-step, y),   (x, y+step),
+                     (x+step, y+step), (x+step, y-step),
+                     (x-step, y+step), (x-step, y-step)]
+        if (x+y) % 2 == 0:
+            neighbors.reverse()
+        results = []
+        for neighbor in neighbors:
+            grid_x, grid_y = neighbor
+            x_neighbor, y_neighbor = self.grid2meter(grid_x, grid_y)
+            dist = sqrt((x_meter-x_neighbor)**2 + (y_meter-y_neighbor)**2)
+            if 0 <= grid_x < self.width and 0 <= grid_y < self.height and dist > 50:
+                if self.map[grid_y, grid_x] == 0:
+                    results.append(neighbor)
+                else:
+                    continue
+        return results
+
 class PathNode(Node):
     def __init__(self, id, data=None):
         super().__init__(id, data)
@@ -115,7 +165,9 @@ class PathGraph(WeightedGraph):
     def addEdge(self, n, u, v, c=None, type=None):
         if not u in self.edges.keys():
             self.edges[u] = {}
-        self.edges[u][v] = PathEdge(n, u, v, c, type)
+        pEdge = PathEdge(n, u, v, c, type)
+        self.edges[u][v] = pEdge
+        return pEdge
 
 class SearchTree:
     def __init__(self):
